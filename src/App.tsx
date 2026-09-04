@@ -7,6 +7,9 @@ import CalendarPage from './pages/Calendar'
 import Exercises from './pages/Exercises'
 import ExerciseDetail from './pages/ExerciseDetail'
 import ExerciseForm from './pages/ExerciseForm'
+import Programs from './pages/Programs'
+import ProgramForm from './pages/ProgramForm'
+import Workout from './pages/Workout'
 
 function Protected({ children }: { children: JSX.Element }) {
   const { session, loading } = useAuth()
@@ -33,6 +36,10 @@ function Routed() {
                 <Route path="/exercises/new" element={<ExerciseForm />} />
                 <Route path="/exercises/:id" element={<ExerciseDetail />} />
                 <Route path="/exercises/:id/edit" element={<ExerciseForm />} />
+                <Route path="/programs" element={<Programs />} />
+                <Route path="/programs/new" element={<ProgramForm />} />
+                <Route path="/programs/:id" element={<ProgramForm />} />
+                <Route path="/workout" element={<Workout />} />
               </Routes>
             </Layout>
           </Protected>

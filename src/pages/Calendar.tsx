@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { CalendarEntry, Program } from '../types'
 
@@ -111,7 +112,8 @@ export default function CalendarPage() {
           </select>
           {programs.length === 0 && (
             <p className="text-xs text-muted mt-2">
-              Программ пока нет — их можно создать в разделе «Упражнения» (раздел программ будет добавлен отдельно).
+              Программ пока нет.{' '}
+              <Link to="/programs/new" className="text-ink underline">Создать первую программу</Link>
             </p>
           )}
         </div>

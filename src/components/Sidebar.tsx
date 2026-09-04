@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 const navItems = [
   { to: '/', label: 'Главная', end: true },
   { to: '/calendar', label: 'Календарь' },
+  { to: '/programs', label: 'Программы' },
   { to: '/exercises', label: 'Упражнения' },
 ]
 

@@ -64,9 +64,12 @@ export default function Home() {
               </li>
             ))}
           </ul>
-          <button className="bg-accent text-ink px-5 py-2 rounded-sm font-medium hover:opacity-90">
+          <Link
+            to="/workout"
+            className="inline-block bg-accent text-ink px-5 py-2 rounded-sm font-medium hover:opacity-90"
+          >
             Начать тренировку
-          </button>
+          </Link>
         </div>
       )}
     </div>
