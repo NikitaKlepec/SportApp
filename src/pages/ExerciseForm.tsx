@@ -109,24 +109,22 @@ export default function ExerciseForm() {
 
         <div>
           <label className="block text-sm mb-1">Группа мышц</label>
-          <div className="flex gap-4 items-start">
-            <select
-              value={muscleGroupId}
-              onChange={(e) => setMuscleGroupId(e.target.value)}
-              className="border border-line rounded-sm px-3 py-2 bg-surface flex-1"
-            >
-              <option value="">— выбрать —</option>
-              {muscleGroups.map((g) => (
-                <option key={g.id} value={g.id}>{g.name}</option>
-              ))}
-            </select>
-            {/* Схема тела наглядно показывает выбранную группу */}
-            <MuscleDiagram
-              className="w-16 h-32 shrink-0"
-              activeRegionIds={activeGroup?.svg_region_ids ?? []}
-              activeColor={activeGroup?.color ?? '#DCDFD9'}
-            />
-          </div>
+          <select
+            value={muscleGroupId}
+            onChange={(e) => setMuscleGroupId(e.target.value)}
+            className="border border-line rounded-sm px-3 py-2 bg-surface w-full mb-3"
+          >
+            <option value="">— выбрать —</option>
+            {muscleGroups.map((g) => (
+              <option key={g.id} value={g.id}>{g.name}</option>
+            ))}
+          </select>
+          {/* Схема тела наглядно показывает выбранную группу (спереди и сзади) */}
+          <MuscleDiagram
+            className="w-full max-w-xs mx-auto"
+            activeRegionIds={activeGroup?.svg_region_ids ?? []}
+            activeColor={activeGroup?.color ?? '#DCDFD9'}
+          />
         </div>
 
         <div>

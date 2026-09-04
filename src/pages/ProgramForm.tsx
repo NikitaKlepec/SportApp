@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { Exercise, ProgramExercise } from '../types'
@@ -10,6 +10,8 @@ export default function ProgramForm() {
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
   const [programId, setProgramId] = useState<string | null>(id ?? null)
+  const [nameError, setNameError] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
 
   const [allExercises, setAllExercises] = useState<Exercise[]>([])
   const [items, setItems] = useState<ProgramExercise[]>([])
@@ -47,41 +49,52 @@ export default function ProgramForm() {
     setItems((data as unknown as ProgramExercise[]) ?? [])
   }
 
-  // Название программы сохраняем сразу (программа должна существовать в БД,
-  // чтобы можно было привязывать к ней упражнения)
-  async function ensureProgramSaved(): Promise<string | null> {
+  // Создание новой программы — только по явному нажатию кнопки
+  async function handleCreate() {
     if (!name.trim()) {
-      alert('Введите название программы')
-      return null
+      setNameError(true)
+      return
     }
+    setNameError(false)
     const { data: userData } = await supabase.auth.getUser()
     const userId = userData.user?.id
-    if (!userId) return null
+    if (!userId) return
 
-    if (programId) {
-      await supabase.from('programs').update({ name, notes }).eq('id', programId)
-      return programId
-    } else {
-      const { data, error } = await supabase
-        .from('programs')
-        .insert({ user_id: userId, name, notes })
-        .select()
-        .single()
-      if (error || !data) return null
-      setProgramId(data.id)
-      return data.id
-    }
+    const { data, error } = await supabase
+      .from('programs')
+      .insert({ user_id: userId, name, notes })
+      .select()
+      .single()
+    if (error || !data) return
+    setProgramId(data.id)
+    navigate(`/programs/${data.id}`, { replace: true })
   }
 
-  async function handleSaveName(e: FormEvent) {
-    e.preventDefault()
-    const pid = await ensureProgramSaved()
-    if (pid) navigate(`/programs/${pid}`, { replace: true })
+  // Сохранение изменений названия/заметок уже существующей программы
+  async function handleSaveEdit() {
+    if (!programId) return
+    if (!name.trim()) {
+      setNameError(true)
+      return
+    }
+    setNameError(false)
+    await supabase.from('programs').update({ name, notes }).eq('id', programId)
+    setJustSaved(true)
+    setTimeout(() => setJustSaved(false), 2000)
+  }
+
+  function handleCancel() {
+    navigate('/programs')
+  }
+
+  // Добавление упражнения требует существующей программы (секция показывается только когда она уже создана)
+  async function ensureProgramId(): Promise<string | null> {
+    return programId
   }
 
   async function addExercise() {
     if (!selectedExerciseId) return
-    const pid = await ensureProgramSaved()
+    const pid = await ensureProgramId()
     if (!pid) return
 
     const { data } = await supabase
@@ -128,31 +141,61 @@ export default function ProgramForm() {
         {programId ? 'Редактировать программу' : 'Новая программа'}
       </h1>
 
-      <form onSubmit={handleSaveName} className="grid gap-4 mb-8 bg-surface border border-line rounded-sm p-4">
+      <div className="grid gap-4 mb-8 bg-surface border border-line rounded-sm p-4">
         <div>
           <label className="block text-sm mb-1">Название программы</label>
           <input
             value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={handleSaveName}
+            onChange={(e) => { setName(e.target.value); if (nameError) setNameError(false) }}
             placeholder="напр. Ноги и пресс"
-            className="w-full border border-line rounded-sm px-3 py-2 bg-base"
+            className={`w-full border rounded-sm px-3 py-2 bg-base ${nameError ? 'border-red-500' : 'border-line'}`}
           />
+          {nameError && <p className="text-red-600 text-xs mt-1">Введите название программы</p>}
         </div>
         <div>
           <label className="block text-sm mb-1">Заметки (необязательно)</label>
           <input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            onBlur={handleSaveName}
             className="w-full border border-line rounded-sm px-3 py-2 bg-base"
           />
         </div>
-      </form>
+        <div className="flex items-center gap-3">
+          {programId ? (
+            <button
+              type="button"
+              onClick={handleSaveEdit}
+              className="bg-ink text-white px-4 py-2 rounded-sm text-sm hover:opacity-90"
+            >
+              Сохранить
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleCreate}
+              className="bg-ink text-white px-4 py-2 rounded-sm text-sm hover:opacity-90"
+            >
+              Создать программу
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="text-sm text-muted hover:text-ink px-2"
+          >
+            Отмена
+          </button>
+          {justSaved && <span className="text-xs text-green-600">Сохранено</span>}
+        </div>
+      </div>
 
-      {!programId ? (
-        <p className="text-muted text-sm">Сначала введите название и уберите курсор из поля — программа сохранится, и появится возможность добавить упражнения.</p>
-      ) : (
+      {!programId && (
+        <p className="text-muted text-sm">
+          Сначала создайте программу — после этого появится возможность добавлять в неё упражнения.
+        </p>
+      )}
+
+      {programId && (
         <>
           <h2 className="font-medium mb-3">Упражнения в программе</h2>
 

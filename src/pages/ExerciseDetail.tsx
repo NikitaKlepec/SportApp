@@ -36,37 +36,35 @@ export default function ExerciseDetail() {
         </Link>
       </div>
 
-      <div className="grid sm:grid-cols-[1fr_auto] gap-6 mb-6">
-        <div>
-          {exercise.image_url && (
-            <img
-              src={exercise.image_url}
-              alt={exercise.name}
-              className="w-full rounded-sm border border-line mb-4"
-            />
-          )}
-          {exercise.video_url && (
-            <div className="aspect-video">
-              {exercise.video_source === 'youtube' ? (
-                <iframe
-                  src={toEmbedUrl(exercise.video_url)}
-                  className="w-full h-full rounded-sm border border-line"
-                  allowFullScreen
-                />
-              ) : (
-                <video src={exercise.video_url} controls className="w-full h-full rounded-sm border border-line" />
-              )}
-            </div>
-          )}
-        </div>
+      <div className="mb-6">
+        {exercise.image_url && (
+          <img
+            src={exercise.image_url}
+            alt={exercise.name}
+            className="w-full rounded-sm border border-line mb-4"
+          />
+        )}
+        {exercise.video_url && (
+          <div className="aspect-video mb-4">
+            {exercise.video_source === 'youtube' ? (
+              <iframe
+                src={toEmbedUrl(exercise.video_url)}
+                className="w-full h-full rounded-sm border border-line"
+                allowFullScreen
+              />
+            ) : (
+              <video src={exercise.video_url} controls className="w-full h-full rounded-sm border border-line" />
+            )}
+          </div>
+        )}
 
-        <div className="flex flex-col items-center">
+        <div className="flex flex-col items-center bg-surface border border-line rounded-sm py-3">
           <MuscleDiagram
-            className="w-24 h-48"
+            className="w-full max-w-xs"
             activeRegionIds={exercise.muscle_group?.svg_region_ids ?? []}
             activeColor={exercise.muscle_group?.color ?? '#DCDFD9'}
           />
-          <span className="text-xs text-muted mt-2">{exercise.muscle_group?.name}</span>
+          <span className="text-xs text-muted mt-1">{exercise.muscle_group?.name}</span>
         </div>
       </div>
 
