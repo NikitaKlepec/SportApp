@@ -16,7 +16,9 @@ export default function ExerciseForm() {
   const [videoSource, setVideoSource] = useState<'upload' | 'youtube'>('youtube')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.from('muscle_groups').select('*').order('name').then(({ data }) => {
@@ -32,6 +34,7 @@ export default function ExerciseForm() {
           setEquipment(data.equipment ?? '')
           setVideoUrl(data.video_url ?? '')
           setVideoSource(data.video_source ?? 'youtube')
+          setExistingImageUrl(data.image_url ?? null)
         }
       })
     }
@@ -42,31 +45,43 @@ export default function ExerciseForm() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setSaving(true)
+    setSaveError(null)
 
     const { data: userData } = await supabase.auth.getUser()
     const userId = userData.user?.id
     if (!userId) {
       setSaving(false)
+      setSaveError('Не удалось определить пользователя — попробуйте войти заново.')
       return
     }
 
     let image_url: string | undefined
     let video_url = videoSource === 'youtube' ? videoUrl : undefined
 
+    // Загрузка фото. Раньше ошибка здесь проглатывалась молча — теперь
+    // если загрузка не удалась (например, нет прав на bucket в Storage),
+    // об этом прямо сообщается, а сохранение упражнения прерывается,
+    // чтобы не потерять уже выбранную картинку молча.
     if (imageFile) {
       const path = `${userId}/${Date.now()}-${imageFile.name}`
       const { data, error } = await supabase.storage.from('exercise-media').upload(path, imageFile)
-      if (!error && data) {
-        image_url = supabase.storage.from('exercise-media').getPublicUrl(data.path).data.publicUrl
+      if (error) {
+        setSaving(false)
+        setSaveError(`Не удалось загрузить фото: ${error.message}`)
+        return
       }
+      image_url = supabase.storage.from('exercise-media').getPublicUrl(data.path).data.publicUrl
     }
 
     if (videoSource === 'upload' && videoFile) {
       const path = `${userId}/${Date.now()}-${videoFile.name}`
       const { data, error } = await supabase.storage.from('exercise-media').upload(path, videoFile)
-      if (!error && data) {
-        video_url = supabase.storage.from('exercise-media').getPublicUrl(data.path).data.publicUrl
+      if (error) {
+        setSaving(false)
+        setSaveError(`Не удалось загрузить видео: ${error.message}`)
+        return
       }
+      video_url = supabase.storage.from('exercise-media').getPublicUrl(data.path).data.publicUrl
     }
 
     const payload = {
@@ -77,16 +92,20 @@ export default function ExerciseForm() {
       equipment,
       video_source: videoSource,
       ...(image_url ? { image_url } : {}),
-      ...(video_url ? { video_url } : {}),
+      ...(video_url !== undefined ? { video_url } : {}),
     }
 
-    if (id) {
-      await supabase.from('exercises').update(payload).eq('id', id)
-    } else {
-      await supabase.from('exercises').insert(payload)
-    }
+    const { error: saveErr } = id
+      ? await supabase.from('exercises').update(payload).eq('id', id)
+      : await supabase.from('exercises').insert(payload)
 
     setSaving(false)
+
+    if (saveErr) {
+      setSaveError(`Не удалось сохранить упражнение: ${saveErr.message}`)
+      return
+    }
+
     navigate('/exercises')
   }
 
@@ -119,7 +138,6 @@ export default function ExerciseForm() {
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}
           </select>
-          {/* Схема тела наглядно показывает выбранную группу (спереди и сзади) */}
           <MuscleDiagram
             className="w-full max-w-xs mx-auto"
             activeRegionIds={activeGroup?.svg_region_ids ?? []}
@@ -149,6 +167,9 @@ export default function ExerciseForm() {
 
         <div>
           <label className="block text-sm mb-1">Фото упражнения</label>
+          {existingImageUrl && !imageFile && (
+            <img src={existingImageUrl} alt="" className="w-24 h-24 object-cover rounded-sm border border-line mb-2" />
+          )}
           <input
             type="file"
             accept="image/*"
@@ -191,6 +212,12 @@ export default function ExerciseForm() {
             />
           )}
         </div>
+
+        {saveError && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-sm px-3 py-2">
+            {saveError}
+          </p>
+        )}
 
         <button
           type="submit"
