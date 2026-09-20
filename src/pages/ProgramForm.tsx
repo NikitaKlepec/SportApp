@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import { Exercise, ProgramExercise } from '../types'
+import { ProgramExercise } from '../types'
+
+// Для выпадающего списка в конструкторе нужны только id и название —
+// полный тип Exercise (с группами мышц/категориями/тегами) тут не нужен.
+interface ExerciseOption {
+  id: string
+  name: string
+}
 
 export default function ProgramForm() {
   const { id } = useParams() // id программы, если редактируем существующую
@@ -13,7 +20,7 @@ export default function ProgramForm() {
   const [nameError, setNameError] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
 
-  const [allExercises, setAllExercises] = useState<Exercise[]>([])
+  const [allExercises, setAllExercises] = useState<ExerciseOption[]>([])
   const [items, setItems] = useState<ProgramExercise[]>([])
 
   // Поля формы добавления нового упражнения в программу
@@ -24,8 +31,8 @@ export default function ProgramForm() {
   const [restSeconds, setRestSeconds] = useState(60)
 
   useEffect(() => {
-    supabase.from('exercises').select('*, muscle_group:muscle_groups(*)').order('name').then(({ data }) => {
-      setAllExercises((data as unknown as Exercise[]) ?? [])
+    supabase.from('exercises').select('id, name').order('name').then(({ data }) => {
+      setAllExercises(data ?? [])
     })
   }, [])
 
@@ -87,20 +94,13 @@ export default function ProgramForm() {
     navigate('/programs')
   }
 
-  // Добавление упражнения требует существующей программы (секция показывается только когда она уже создана)
-  async function ensureProgramId(): Promise<string | null> {
-    return programId
-  }
-
   async function addExercise() {
-    if (!selectedExerciseId) return
-    const pid = await ensureProgramId()
-    if (!pid) return
+    if (!selectedExerciseId || !programId) return
 
     const { data } = await supabase
       .from('program_exercises')
       .insert({
-        program_id: pid,
+        program_id: programId,
         exercise_id: selectedExerciseId,
         sets,
         reps,
@@ -127,7 +127,6 @@ export default function ProgramForm() {
     if (target < 0 || target >= newItems.length) return
     ;[newItems[index], newItems[target]] = [newItems[target], newItems[index]]
     setItems(newItems)
-    // сохраняем новый порядок
     await Promise.all(
       newItems.map((item, idx) =>
         supabase.from('program_exercises').update({ order_index: idx }).eq('id', item.id)

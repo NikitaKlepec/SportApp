@@ -1,46 +1,98 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
-import { MuscleGroup } from '../types'
+import { fetchExercise, syncExerciseRelations } from '../lib/exercises'
+import { Category, MuscleGroup, Tag } from '../types'
 import MuscleDiagram from '../components/MuscleDiagram'
+
+const ACCENT = '#C6FF33'
 
 export default function ExerciseForm() {
   const { id } = useParams() // если есть id — режим редактирования
   const navigate = useNavigate()
+
   const [muscleGroups, setMuscleGroups] = useState<MuscleGroup[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
+  const [tags, setTags] = useState<Tag[]>([])
+
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [muscleGroupId, setMuscleGroupId] = useState('')
   const [equipment, setEquipment] = useState('')
   const [videoUrl, setVideoUrl] = useState('')
   const [videoSource, setVideoSource] = useState<'upload' | 'youtube'>('youtube')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
+
+  const [selectedMuscleGroupIds, setSelectedMuscleGroupIds] = useState<string[]>([])
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([])
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [newTagName, setNewTagName] = useState('')
+
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
-    supabase.from('muscle_groups').select('*').order('name').then(({ data }) => {
-      setMuscleGroups(data ?? [])
-    })
-
-    if (id) {
-      supabase.from('exercises').select('*').eq('id', id).single().then(({ data }) => {
-        if (data) {
-          setName(data.name)
-          setDescription(data.description ?? '')
-          setMuscleGroupId(data.muscle_group_id ?? '')
-          setEquipment(data.equipment ?? '')
-          setVideoUrl(data.video_url ?? '')
-          setVideoSource(data.video_source ?? 'youtube')
-          setExistingImageUrl(data.image_url ?? null)
-        }
-      })
-    }
+    loadOptions()
+    if (id) loadExercise(id)
   }, [id])
 
-  const activeGroup = muscleGroups.find((g) => g.id === muscleGroupId)
+  async function loadOptions() {
+    const [{ data: mg }, { data: cats }, { data: tgs }] = await Promise.all([
+      supabase.from('muscle_groups').select('*').order('name'),
+      supabase.from('categories').select('*').order('name'),
+      supabase.from('tags').select('*').order('name'),
+    ])
+    setMuscleGroups(mg ?? [])
+    setCategories(cats ?? [])
+    setTags(tgs ?? [])
+  }
+
+  async function loadExercise(exerciseId: string) {
+    const ex = await fetchExercise(exerciseId)
+    if (!ex) return
+    setName(ex.name)
+    setDescription(ex.description ?? '')
+    setEquipment(ex.equipment ?? '')
+    setVideoUrl(ex.video_url ?? '')
+    setVideoSource(ex.video_source ?? 'youtube')
+    setExistingImageUrl(ex.image_url ?? null)
+    setSelectedMuscleGroupIds(ex.muscleGroups.map((g) => g.id))
+    setSelectedCategoryIds(ex.categories.map((c) => c.id))
+    setSelectedTagIds(ex.tags.map((t) => t.id))
+  }
+
+  function toggle(list: string[], setList: (v: string[]) => void, value: string) {
+    setList(list.includes(value) ? list.filter((v) => v !== value) : [...list, value])
+  }
+
+  async function addCategory() {
+    const trimmed = newCategoryName.trim()
+    if (!trimmed) return
+    const { data, error } = await supabase.from('categories').insert({ name: trimmed }).select().single()
+    if (!error && data) {
+      setCategories((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+      setSelectedCategoryIds((prev) => [...prev, data.id])
+    }
+    setNewCategoryName('')
+  }
+
+  async function addTag() {
+    const trimmed = newTagName.trim()
+    if (!trimmed) return
+    const { data, error } = await supabase.from('tags').insert({ name: trimmed }).select().single()
+    if (!error && data) {
+      setTags((prev) => [...prev, data].sort((a, b) => a.name.localeCompare(b.name)))
+      setSelectedTagIds((prev) => [...prev, data.id])
+    }
+    setNewTagName('')
+  }
+
+  // Объединённые зоны подсветки на диаграмме тела по всем выбранным группам
+  const activeRegionIds = muscleGroups
+    .filter((g) => selectedMuscleGroupIds.includes(g.id))
+    .flatMap((g) => g.svg_region_ids)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -58,10 +110,6 @@ export default function ExerciseForm() {
     let image_url: string | undefined
     let video_url = videoSource === 'youtube' ? videoUrl : undefined
 
-    // Загрузка фото. Раньше ошибка здесь проглатывалась молча — теперь
-    // если загрузка не удалась (например, нет прав на bucket в Storage),
-    // об этом прямо сообщается, а сохранение упражнения прерывается,
-    // чтобы не потерять уже выбранную картинку молча.
     if (imageFile) {
       const path = `${userId}/${Date.now()}-${imageFile.name}`
       const { data, error } = await supabase.storage.from('exercise-media').upload(path, imageFile)
@@ -88,24 +136,32 @@ export default function ExerciseForm() {
       user_id: userId,
       name,
       description,
-      muscle_group_id: muscleGroupId || null,
       equipment,
       video_source: videoSource,
       ...(image_url ? { image_url } : {}),
       ...(video_url !== undefined ? { video_url } : {}),
     }
 
-    const { error: saveErr } = id
-      ? await supabase.from('exercises').update(payload).eq('id', id)
-      : await supabase.from('exercises').insert(payload)
+    let exerciseId = id
+    let saveErr
 
-    setSaving(false)
+    if (id) {
+      ;({ error: saveErr } = await supabase.from('exercises').update(payload).eq('id', id))
+    } else {
+      const { data, error } = await supabase.from('exercises').insert(payload).select().single()
+      saveErr = error
+      exerciseId = data?.id
+    }
 
-    if (saveErr) {
-      setSaveError(`Не удалось сохранить упражнение: ${saveErr.message}`)
+    if (saveErr || !exerciseId) {
+      setSaving(false)
+      setSaveError(`Не удалось сохранить упражнение: ${saveErr?.message ?? 'неизвестная ошибка'}`)
       return
     }
 
+    await syncExerciseRelations(exerciseId, selectedMuscleGroupIds, selectedCategoryIds, selectedTagIds)
+
+    setSaving(false)
     navigate('/exercises')
   }
 
@@ -127,22 +183,104 @@ export default function ExerciseForm() {
         </div>
 
         <div>
-          <label className="block text-sm mb-1">Группа мышц</label>
-          <select
-            value={muscleGroupId}
-            onChange={(e) => setMuscleGroupId(e.target.value)}
-            className="border border-line rounded-sm px-3 py-2 bg-surface w-full mb-3"
-          >
-            <option value="">— выбрать —</option>
-            {muscleGroups.map((g) => (
-              <option key={g.id} value={g.id}>{g.name}</option>
-            ))}
-          </select>
+          <label className="block text-sm mb-2">Группы мышц (можно несколько)</label>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {muscleGroups.map((g) => {
+              const active = selectedMuscleGroupIds.includes(g.id)
+              return (
+                <button
+                  key={g.id}
+                  type="button"
+                  onClick={() => toggle(selectedMuscleGroupIds, setSelectedMuscleGroupIds, g.id)}
+                  className="text-xs px-3 py-1.5 rounded-full border transition-colors"
+                  style={
+                    active
+                      ? { background: g.color, borderColor: g.color, color: '#1A1D1B' }
+                      : { borderColor: '#DCDFD9', color: '#6B7169' }
+                  }
+                >
+                  {g.name}
+                </button>
+              )
+            })}
+          </div>
           <MuscleDiagram
             className="w-full max-w-xs mx-auto"
-            activeRegionIds={activeGroup?.svg_region_ids ?? []}
-            activeColor={activeGroup?.color ?? '#DCDFD9'}
+            activeRegionIds={activeRegionIds}
+            activeColor={ACCENT}
           />
+        </div>
+
+        <div>
+          <label className="block text-sm mb-2">Категории (можно несколько)</label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {categories.map((c) => {
+              const active = selectedCategoryIds.includes(c.id)
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => toggle(selectedCategoryIds, setSelectedCategoryIds, c.id)}
+                  className={`text-xs px-3 py-1.5 rounded-full border ${
+                    active ? 'bg-accent border-accent text-ink' : 'border-line text-muted'
+                  }`}
+                >
+                  {c.name}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={newCategoryName}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              placeholder="Новая категория"
+              className="border border-line rounded-sm px-2 py-1 text-sm bg-surface flex-1"
+            />
+            <button
+              type="button"
+              onClick={addCategory}
+              className="text-xs px-3 py-1.5 rounded-sm border border-line hover:bg-surface"
+            >
+              + Добавить
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm mb-2">Теги (можно несколько)</label>
+          <div className="flex flex-wrap gap-2 mb-2">
+            {tags.map((t) => {
+              const active = selectedTagIds.includes(t.id)
+              return (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => toggle(selectedTagIds, setSelectedTagIds, t.id)}
+                  className={`text-xs px-3 py-1.5 rounded-full border ${
+                    active ? 'bg-ink border-ink text-white' : 'border-line text-muted'
+                  }`}
+                >
+                  #{t.name}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={newTagName}
+              onChange={(e) => setNewTagName(e.target.value)}
+              placeholder="Новый тег"
+              className="border border-line rounded-sm px-2 py-1 text-sm bg-surface flex-1"
+            />
+            <button
+              type="button"
+              onClick={addTag}
+              className="text-xs px-3 py-1.5 rounded-sm border border-line hover:bg-surface"
+            >
+              + Добавить
+            </button>
+          </div>
         </div>
 
         <div>

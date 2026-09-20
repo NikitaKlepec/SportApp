@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
+import { fetchExercise } from '../lib/exercises'
 import { Exercise } from '../types'
 import MuscleDiagram from '../components/MuscleDiagram'
+
+const ACCENT = '#C6FF33'
 
 function toEmbedUrl(url: string) {
   const match = url.match(/(?:youtu\.be\/|v=)([\w-]+)/)
@@ -14,19 +16,16 @@ export default function ExerciseDetail() {
   const [exercise, setExercise] = useState<Exercise | null>(null)
 
   useEffect(() => {
-    supabase
-      .from('exercises')
-      .select('*, muscle_group:muscle_groups(*)')
-      .eq('id', id)
-      .single()
-      .then(({ data }) => setExercise(data as unknown as Exercise))
+    if (id) fetchExercise(id).then(setExercise)
   }, [id])
 
   if (!exercise) return <p className="text-muted">Загрузка…</p>
 
+  const activeRegionIds = exercise.muscleGroups.flatMap((g) => g.svg_region_ids)
+
   return (
     <div className="max-w-2xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-3">
         <h1 className="text-2xl font-semibold">{exercise.name}</h1>
         <Link
           to={`/exercises/${exercise.id}/edit`}
@@ -36,15 +35,23 @@ export default function ExerciseDetail() {
         </Link>
       </div>
 
+      {(exercise.categories.length > 0 || exercise.tags.length > 0) && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          {exercise.categories.map((c) => (
+            <span key={c.id} className="text-xs px-2 py-1 rounded-full bg-accent/40 text-ink">
+              {c.name}
+            </span>
+          ))}
+          {exercise.tags.map((t) => (
+            <span key={t.id} className="text-xs px-2 py-1 rounded-full bg-base border border-line text-muted">
+              #{t.name}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="mb-6">
-        {exercise.image_url && (
-          <img
-            src={exercise.image_url}
-            alt={exercise.name}
-            className="w-full rounded-sm border border-line mb-4"
-          />
-        )}
-        {exercise.video_url && (
+        {exercise.video_url ? (
           <div className="aspect-video mb-4">
             {exercise.video_source === 'youtube' ? (
               <iframe
@@ -56,15 +63,25 @@ export default function ExerciseDetail() {
               <video src={exercise.video_url} controls className="w-full h-full rounded-sm border border-line" />
             )}
           </div>
+        ) : (
+          exercise.image_url && (
+            <img
+              src={exercise.image_url}
+              alt={exercise.name}
+              className="w-full rounded-sm border border-line mb-4"
+            />
+          )
         )}
 
         <div className="flex flex-col items-center bg-surface border border-line rounded-sm py-3">
           <MuscleDiagram
             className="w-full max-w-xs"
-            activeRegionIds={exercise.muscle_group?.svg_region_ids ?? []}
-            activeColor={exercise.muscle_group?.color ?? '#DCDFD9'}
+            activeRegionIds={activeRegionIds}
+            activeColor={ACCENT}
           />
-          <span className="text-xs text-muted mt-1">{exercise.muscle_group?.name}</span>
+          <span className="text-xs text-muted mt-1">
+            {exercise.muscleGroups.map((g) => g.name).join(', ') || 'Группа мышц не указана'}
+          </span>
         </div>
       </div>
 

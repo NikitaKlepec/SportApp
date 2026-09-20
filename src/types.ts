@@ -5,13 +5,24 @@ export interface MuscleGroup {
   svg_region_ids: string[]
 }
 
+export interface Category {
+  id: string
+  name: string
+}
+
+export interface Tag {
+  id: string
+  name: string
+}
+
 export interface Exercise {
   id: string
   user_id: string
   name: string
   description: string | null
-  muscle_group_id: string | null
-  muscle_group?: MuscleGroup
+  muscleGroups: MuscleGroup[]
+  categories: Category[]
+  tags: Tag[]
   image_url: string | null
   video_url: string | null
   video_source: 'upload' | 'youtube'
