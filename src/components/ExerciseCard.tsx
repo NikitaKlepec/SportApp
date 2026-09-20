@@ -11,8 +11,8 @@ export default function ExerciseCard({ exercise }: { exercise: Exercise }) {
       className="flex bg-surface border border-line rounded-sm overflow-hidden hover:shadow-sm transition-shadow"
       style={{ borderLeft: `4px solid ${color}` }}
     >
-      <div className="p-3 flex flex-col justify-center flex-1 min-w-0 gap-0.5">
-        <h3 className="font-medium truncate">{exercise.name}</h3>
+      <div className="p-3 flex flex-col justify-center min-w-0 gap-0.5" style={{ flexBasis: '30%', flexGrow: 0, flexShrink: 0 }}>
+        <h3 className="font-medium truncate text-sm">{exercise.name}</h3>
         <span className="text-xs text-muted truncate">{groupNames || 'Без группы'}</span>
         {exercise.equipment && (
           <span className="text-xs text-muted truncate">{exercise.equipment}</span>
@@ -32,7 +32,7 @@ export default function ExerciseCard({ exercise }: { exercise: Exercise }) {
           </div>
         )}
       </div>
-      <div className="w-24 h-24 shrink-0 bg-base">
+      <div className="h-32 bg-base" style={{ flexBasis: '70%', flexGrow: 0, flexShrink: 0 }}>
         {exercise.image_url ? (
           <img src={exercise.image_url} alt={exercise.name} className="w-full h-full object-cover" />
         ) : (
