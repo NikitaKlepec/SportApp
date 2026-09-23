@@ -1,9 +1,10 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { fetchExercise, syncExerciseRelations } from '../lib/exercises'
 import { Category, MuscleGroup, Tag } from '../types'
 import MuscleDiagram from '../components/MuscleDiagram'
+import ImagePositioner, { ImagePositionerHandle } from '../components/ImagePositioner'
 
 const ACCENT = '#C6FF33'
 
@@ -21,6 +22,7 @@ export default function ExerciseForm() {
   const [videoUrl, setVideoUrl] = useState('')
   const [videoSource, setVideoSource] = useState<'upload' | 'youtube'>('youtube')
   const [imageFile, setImageFile] = useState<File | null>(null)
+  const positionerRef = useRef<ImagePositionerHandle>(null)
   const [videoFile, setVideoFile] = useState<File | null>(null)
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null)
 
@@ -111,8 +113,9 @@ export default function ExerciseForm() {
     let video_url = videoSource === 'youtube' ? videoUrl : undefined
 
     if (imageFile) {
-      const path = `${userId}/${Date.now()}-${imageFile.name}`
-      const { data, error } = await supabase.storage.from('exercise-media').upload(path, imageFile)
+      const croppedFile = (await positionerRef.current?.getCroppedFile()) ?? imageFile
+      const path = `${userId}/${Date.now()}-${croppedFile.name}`
+      const { data, error } = await supabase.storage.from('exercise-media').upload(path, croppedFile)
       if (error) {
         setSaving(false)
         setSaveError(`Не удалось загрузить фото: ${error.message}`)
@@ -162,6 +165,17 @@ export default function ExerciseForm() {
     await syncExerciseRelations(exerciseId, selectedMuscleGroupIds, selectedCategoryIds, selectedTagIds)
 
     setSaving(false)
+    navigate('/exercises')
+  }
+
+  async function handleDelete() {
+    if (!id) return
+    if (!confirm('Удалить это упражнение? Оно также пропадёт из всех программ, где использовалось. Отменить нельзя.')) return
+    const { error } = await supabase.from('exercises').delete().eq('id', id)
+    if (error) {
+      setSaveError(`Не удалось удалить упражнение: ${error.message}`)
+      return
+    }
     navigate('/exercises')
   }
 
@@ -305,8 +319,14 @@ export default function ExerciseForm() {
 
         <div>
           <label className="block text-sm mb-1">Фото упражнения</label>
-          {existingImageUrl && !imageFile && (
-            <img src={existingImageUrl} alt="" className="w-24 h-24 object-cover rounded-sm border border-line mb-2" />
+          {imageFile ? (
+            <div className="mb-2 max-w-xs">
+              <ImagePositioner ref={positionerRef} file={imageFile} />
+            </div>
+          ) : (
+            existingImageUrl && (
+              <img src={existingImageUrl} alt="" className="w-24 h-24 object-cover rounded-sm border border-line mb-2" />
+            )
           )}
           <input
             type="file"
@@ -357,13 +377,24 @@ export default function ExerciseForm() {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={saving}
-          className="justify-self-start bg-ink text-white px-5 py-2 rounded-sm hover:opacity-90 disabled:opacity-50"
-        >
-          {saving ? 'Сохранение…' : 'Сохранить'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="submit"
+            disabled={saving}
+            className="bg-ink text-white px-5 py-2 rounded-sm hover:opacity-90 disabled:opacity-50"
+          >
+            {saving ? 'Сохранение…' : 'Сохранить'}
+          </button>
+          {id && (
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="text-sm text-red-600 hover:underline px-2"
+            >
+              Удалить упражнение
+            </button>
+          )}
+        </div>
       </form>
     </div>
   )

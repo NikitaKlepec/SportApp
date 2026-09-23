@@ -32,7 +32,7 @@ export default function ExerciseCard({ exercise }: { exercise: Exercise }) {
           </div>
         )}
       </div>
-      <div className="h-32 bg-base" style={{ flexBasis: '70%', flexGrow: 0, flexShrink: 0 }}>
+      <div className="bg-base" style={{ flexBasis: '70%', flexGrow: 0, flexShrink: 0, aspectRatio: '16 / 9' }}>
         {exercise.image_url ? (
           <img src={exercise.image_url} alt={exercise.name} className="w-full h-full object-cover" />
         ) : (
