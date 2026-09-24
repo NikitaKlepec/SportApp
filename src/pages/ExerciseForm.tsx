@@ -6,8 +6,6 @@ import { Category, MuscleGroup, Tag } from '../types'
 import MuscleDiagram from '../components/MuscleDiagram'
 import ImagePositioner, { ImagePositionerHandle } from '../components/ImagePositioner'
 
-const ACCENT = '#C6FF33'
-
 export default function ExerciseForm() {
   const { id } = useParams() // если есть id — режим редактирования
   const navigate = useNavigate()
@@ -92,9 +90,9 @@ export default function ExerciseForm() {
   }
 
   // Объединённые зоны подсветки на диаграмме тела по всем выбранным группам
-  const activeRegionIds = muscleGroups
+  const activeGroups = muscleGroups
     .filter((g) => selectedMuscleGroupIds.includes(g.id))
-    .flatMap((g) => g.svg_region_ids)
+    .map((g) => ({ svgRegionIds: g.svg_region_ids, color: g.color }))
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -220,8 +218,7 @@ export default function ExerciseForm() {
           </div>
           <MuscleDiagram
             className="w-full max-w-xs mx-auto"
-            activeRegionIds={activeRegionIds}
-            activeColor={ACCENT}
+            activeGroups={activeGroups}
           />
         </div>
 

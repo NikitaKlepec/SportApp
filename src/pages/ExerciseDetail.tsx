@@ -4,8 +4,6 @@ import { fetchExercise } from '../lib/exercises'
 import { Exercise } from '../types'
 import MuscleDiagram from '../components/MuscleDiagram'
 
-const ACCENT = '#C6FF33'
-
 function toEmbedUrl(url: string) {
   const match = url.match(/(?:youtu\.be\/|v=)([\w-]+)/)
   return match ? `https://www.youtube.com/embed/${match[1]}` : url
@@ -21,7 +19,10 @@ export default function ExerciseDetail() {
 
   if (!exercise) return <p className="text-muted">Загрузка…</p>
 
-  const activeRegionIds = exercise.muscleGroups.flatMap((g) => g.svg_region_ids)
+  const activeGroups = exercise.muscleGroups.map((g) => ({
+    svgRegionIds: g.svg_region_ids,
+    color: g.color,
+  }))
 
   return (
     <div className="max-w-2xl">
@@ -74,14 +75,18 @@ export default function ExerciseDetail() {
         )}
 
         <div className="flex flex-col items-center bg-surface border border-line rounded-sm py-3">
-          <MuscleDiagram
-            className="w-full max-w-xs"
-            activeRegionIds={activeRegionIds}
-            activeColor={ACCENT}
-          />
-          <span className="text-xs text-muted mt-1">
-            {exercise.muscleGroups.map((g) => g.name).join(', ') || 'Группа мышц не указана'}
-          </span>
+          <MuscleDiagram className="w-full max-w-xs" activeGroups={activeGroups} />
+          <div className="flex flex-wrap justify-center gap-x-2 gap-y-1 mt-2 px-3">
+            {exercise.muscleGroups.map((g) => (
+              <span key={g.id} className="text-xs flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full" style={{ background: g.color }} />
+                {g.name}
+              </span>
+            ))}
+            {exercise.muscleGroups.length === 0 && (
+              <span className="text-xs text-muted">Группа мышц не указана</span>
+            )}
+          </div>
         </div>
       </div>
 

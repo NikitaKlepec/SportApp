@@ -1,45 +1,54 @@
 import Model, { IExerciseData } from 'react-body-highlighter'
 
 /**
- * Показывает анатомическую фигуру человека спереди и сзади с подсветкой
- * выбранной группы мышц. Сами SVG-фигуры взяты из открытой библиотеки
- * react-body-highlighter (MIT), а не нарисованы вручную — это даёт
- * нормальную анатомическую детализацию вместо самодельных капсул.
- *
- * activeRegionIds должен содержать "слаги" из списка, поддерживаемого
- * библиотекой (см. muscle_groups.svg_region_ids в базе):
- *   chest, biceps, triceps, forearm, front-deltoids, back-deltoids,
- *   abs, obliques, trapezius, upper-back, lower-back,
- *   quadriceps, hamstring, adductor, abductors, calves, gluteal
+ * Показывает анатомическую фигуру человека спереди и сзади (на базе
+ * открытой библиотеки react-body-highlighter, MIT). В отличие от простого
+ * варианта с одним общим цветом, здесь КАЖДАЯ выбранная группа мышц
+ * подсвечивается своим собственным цветом одновременно — для этого поверх
+ * базового силуэта рисуется по одному прозрачному слою на каждую активную
+ * группу (bodyColor="transparent"), так слои не перекрывают друг друга.
  */
+interface ActiveGroup {
+  svgRegionIds: string[]
+  color: string
+}
+
 interface MuscleDiagramProps {
-  activeRegionIds: string[]
-  activeColor: string
+  activeGroups: ActiveGroup[]
   className?: string
 }
 
-export default function MuscleDiagram({ activeRegionIds, activeColor, className }: MuscleDiagramProps) {
-  const data: IExerciseData[] =
-    activeRegionIds.length > 0
-      ? [{ name: 'Выбранная группа', muscles: activeRegionIds as any }]
-      : []
+function View({ type, activeGroups }: { type: 'anterior' | 'posterior'; activeGroups: ActiveGroup[] }) {
+  return (
+    <div style={{ position: 'relative', width: '48%', maxWidth: 130 }}>
+      {/* базовый серый силуэт */}
+      <Model data={[]} type={type} bodyColor="#D9DBD5" highlightedColors={[]} style={{ width: '100%' }} />
 
+      {/* по слою на каждую активную группу, каждый — своим цветом, остальное прозрачно */}
+      {activeGroups.map((g, i) => {
+        if (g.svgRegionIds.length === 0) return null
+        const data: IExerciseData[] = [{ name: `group-${i}`, muscles: g.svgRegionIds as any }]
+        return (
+          <div key={i} style={{ position: 'absolute', inset: 0 }}>
+            <Model
+              data={data}
+              type={type}
+              bodyColor="transparent"
+              highlightedColors={[g.color]}
+              style={{ width: '100%' }}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+export default function MuscleDiagram({ activeGroups, className }: MuscleDiagramProps) {
   return (
     <div className={className} style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
-      <Model
-        data={data}
-        type="anterior"
-        bodyColor="#D9DBD5"
-        highlightedColors={[activeColor]}
-        style={{ width: '48%', maxWidth: 130 }}
-      />
-      <Model
-        data={data}
-        type="posterior"
-        bodyColor="#D9DBD5"
-        highlightedColors={[activeColor]}
-        style={{ width: '48%', maxWidth: 130 }}
-      />
+      <View type="anterior" activeGroups={activeGroups} />
+      <View type="posterior" activeGroups={activeGroups} />
     </div>
   )
 }
