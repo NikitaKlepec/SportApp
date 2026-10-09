@@ -11,11 +11,15 @@ export default function ExerciseCard({ exercise }: { exercise: Exercise }) {
       className="flex bg-surface border border-line rounded-sm overflow-hidden hover:shadow-sm transition-shadow"
       style={{ borderLeft: `4px solid ${color}` }}
     >
-      <div className="p-3 flex flex-col justify-center min-w-0 gap-0.5" style={{ flexBasis: '30%', flexGrow: 0, flexShrink: 0 }}>
-        <h3 className="font-medium truncate text-sm">{exercise.name}</h3>
-        <span className="text-xs text-muted truncate">{groupNames || 'Без группы'}</span>
+      <div
+        className="p-3 flex flex-col justify-center min-w-0 gap-0.5"
+        style={{ flexBasis: '30%', flexGrow: 0, flexShrink: 0 }}
+      >
+        {/* Название и остальное текстом переносится на новые строки, а не обрезается */}
+        <h3 className="font-medium text-sm leading-snug break-words line-clamp-4">{exercise.name}</h3>
+        <span className="text-xs text-muted break-words line-clamp-2">{groupNames || 'Без группы'}</span>
         {exercise.equipment && (
-          <span className="text-xs text-muted truncate">{exercise.equipment}</span>
+          <span className="text-xs text-muted break-words line-clamp-2">{exercise.equipment}</span>
         )}
         {(exercise.categories.length > 0 || exercise.tags.length > 0) && (
           <div className="flex flex-wrap gap-1 mt-1">
@@ -32,7 +36,10 @@ export default function ExerciseCard({ exercise }: { exercise: Exercise }) {
           </div>
         )}
       </div>
-      <div className="bg-base" style={{ flexBasis: '70%', flexGrow: 0, flexShrink: 0, aspectRatio: '16 / 9' }}>
+      <div
+        className="bg-base"
+        style={{ flexBasis: '70%', flexGrow: 0, flexShrink: 0, aspectRatio: '16 / 9' }}
+      >
         {exercise.image_url ? (
           <img src={exercise.image_url} alt={exercise.name} className="w-full h-full object-cover" />
         ) : (
