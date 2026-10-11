@@ -9,6 +9,8 @@ import ExerciseDetail from './pages/ExerciseDetail'
 import ExerciseForm from './pages/ExerciseForm'
 import Programs from './pages/Programs'
 import ProgramForm from './pages/ProgramForm'
+import WorkoutTemplates from './pages/WorkoutTemplates'
+import WorkoutTemplateForm from './pages/WorkoutTemplateForm'
 import Workout from './pages/Workout'
 
 function Protected({ children }: { children: JSX.Element }) {
@@ -39,6 +41,9 @@ function Routed() {
                 <Route path="/programs" element={<Programs />} />
                 <Route path="/programs/new" element={<ProgramForm />} />
                 <Route path="/programs/:id" element={<ProgramForm />} />
+                <Route path="/templates" element={<WorkoutTemplates />} />
+                <Route path="/templates/new" element={<WorkoutTemplateForm />} />
+                <Route path="/templates/:id" element={<WorkoutTemplateForm />} />
                 <Route path="/workout" element={<Workout />} />
               </Routes>
             </Layout>

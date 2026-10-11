@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { fetchDayPlan, DayPlan, PlanItem } from '../lib/dayPlan'
+import { localDateStr } from '../lib/dates'
 import { ProgramExercise } from '../types'
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
 
 type Phase = 'loading' | 'exercise' | 'resting' | 'empty' | 'done'
 
 export default function Workout() {
   const navigate = useNavigate()
   const [phase, setPhase] = useState<Phase>('loading')
-  const [items, setItems] = useState<ProgramExercise[]>([])
+  const [plan, setPlan] = useState<DayPlan | null>(null)
   const [index, setIndex] = useState(0)
   const [logId, setLogId] = useState<string | null>(null)
 
@@ -24,57 +22,47 @@ export default function Workout() {
   const [secondsLeft, setSecondsLeft] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const current = items[index]
+  const items: PlanItem[] = plan?.items ?? []
+  const current: PlanItem | undefined = items[index]
+  const sectionCount = plan?.sections.length ?? 0
+  const multi = sectionCount > 1
 
   useEffect(() => {
     async function init() {
       const { data: userData } = await supabase.auth.getUser()
       const uid = userData.user?.id
-      if (!uid) return
-
-      const { data: entry } = await supabase
-        .from('calendar_entries')
-        .select('*')
-        .eq('date', todayStr())
-        .maybeSingle()
-
-      if (!entry?.program_id) {
+      if (!uid) {
         setPhase('empty')
         return
       }
 
-      const { data: exData } = await supabase
-        .from('program_exercises')
-        .select('*, exercise:exercises(*)')
-        .eq('program_id', entry.program_id)
-        .order('order_index')
-
-      const list = (exData as unknown as ProgramExercise[]) ?? []
-      if (list.length === 0) {
+      const today = localDateStr()
+      const p = await fetchDayPlan(today)
+      if (!p || p.items.length === 0) {
         setPhase('empty')
         return
       }
-      setItems(list)
+      setPlan(p)
 
       // находим или создаём лог тренировки на сегодня
       const { data: existingLog } = await supabase
         .from('workout_logs')
         .select('*')
-        .eq('date', todayStr())
+        .eq('date', today)
         .maybeSingle()
 
       let currentLogId = existingLog?.id
       if (!currentLogId) {
         const { data: newLog } = await supabase
           .from('workout_logs')
-          .insert({ user_id: uid, calendar_entry_id: entry.id, date: todayStr(), status: 'in_progress' })
+          .insert({ user_id: uid, calendar_entry_id: p.entryId, date: today, status: 'in_progress' })
           .select()
           .single()
         currentLogId = newLog?.id
       }
       setLogId(currentLogId ?? null)
 
-      prefillFor(list[0])
+      prefillFor(p.items[0])
       setPhase('exercise')
     }
     init()
@@ -93,7 +81,9 @@ export default function Workout() {
       return
     }
     timerRef.current = setInterval(() => setSecondsLeft((s) => s - 1), 1000)
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
   }, [phase, secondsLeft])
 
   async function saveCurrentEntry() {
@@ -109,6 +99,7 @@ export default function Workout() {
   }
 
   async function handleDoneExercise() {
+    if (!current) return
     await saveCurrentEntry()
     const isLast = index >= items.length - 1
     if (isLast) {
@@ -154,17 +145,6 @@ export default function Workout() {
 
   if (phase === 'loading') return <p className="text-muted">Загрузка…</p>
 
-  if (phase === 'empty') {
-    return (
-      <div className="max-w-md">
-        <p className="text-muted mb-4">На сегодня не назначена программа с упражнениями.</p>
-        <button onClick={() => navigate('/calendar')} className="bg-ink text-white px-4 py-2 rounded-sm text-sm">
-          Перейти в календарь
-        </button>
-      </div>
-    )
-  }
-
   if (phase === 'done') {
     return (
       <div className="max-w-md text-center py-12">
@@ -178,19 +158,44 @@ export default function Workout() {
     )
   }
 
+  if (phase === 'empty' || !current) {
+    return (
+      <div className="max-w-md">
+        <p className="text-muted mb-4">На сегодня не назначена тренировка с упражнениями.</p>
+        <button onClick={() => navigate('/calendar')} className="bg-ink text-white px-4 py-2 rounded-sm text-sm">
+          Перейти в календарь
+        </button>
+      </div>
+    )
+  }
+
   if (phase === 'resting') {
     const next = items[index + 1]
+    const partChanges = !!next && multi && next.sectionIndex !== current.sectionIndex
     return (
       <div className="max-w-md text-center py-12">
         <p className="text-muted mb-2">Отдых</p>
         <div className="text-6xl font-display font-semibold mb-6">{secondsLeft}</div>
-        {next && <p className="text-sm text-muted mb-6">Дальше: {next.exercise?.name}</p>}
-        <button
-          onClick={() => { if (timerRef.current) clearInterval(timerRef.current); goToNext() }}
-          className="text-sm border border-line px-4 py-2 rounded-sm hover:bg-surface"
-        >
-          Пропустить отдых
-        </button>
+        {next && (
+          <p className="text-sm text-muted mb-2">Дальше: {next.exercise?.name}</p>
+        )}
+        {partChanges && next && (
+          <p className="text-xs font-medium inline-block bg-accent px-2 py-0.5 rounded-full mb-6">
+            Следующая часть: {next.sectionName}
+          </p>
+        )}
+        {!partChanges && <div className="mb-4" />}
+        <div>
+          <button
+            onClick={() => {
+              if (timerRef.current) clearInterval(timerRef.current)
+              goToNext()
+            }}
+            className="text-sm border border-line px-4 py-2 rounded-sm hover:bg-surface"
+          >
+            Пропустить отдых
+          </button>
+        </div>
       </div>
     )
   }
@@ -198,18 +203,32 @@ export default function Workout() {
   // phase === 'exercise'
   return (
     <div className="max-w-md">
+      {multi && (
+        <p className="text-xs font-medium inline-block bg-accent px-2 py-0.5 rounded-full mb-2">
+          Часть {current.sectionIndex + 1} из {sectionCount} · {current.sectionName}
+        </p>
+      )}
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs text-muted">Упражнение {index + 1} из {items.length}</span>
-        <button onClick={handleSkip} className="text-xs text-muted hover:text-red-600">Прервать тренировку</button>
+        <span className="text-xs text-muted">
+          Упражнение {index + 1} из {items.length}
+        </span>
+        <button onClick={handleSkip} className="text-xs text-muted hover:text-red-600">
+          Прервать тренировку
+        </button>
       </div>
       <h1 className="text-2xl font-semibold mb-4">{current.exercise?.name}</h1>
 
       {current.exercise?.image_url && (
-        <img src={current.exercise.image_url} alt={current.exercise.name} className="w-full rounded-sm border border-line mb-4" />
+        <img
+          src={current.exercise.image_url}
+          alt={current.exercise.name}
+          className="w-full rounded-sm border border-line mb-4"
+        />
       )}
 
       <p className="text-sm text-muted mb-4">
-        План: {current.sets}×{current.reps}{current.weight ? ` · ${current.weight} кг` : ''}
+        План: {current.sets}×{current.reps}
+        {current.weight ? ` · ${current.weight} кг` : ''}
       </p>
 
       <div className="grid grid-cols-3 gap-3 mb-6">

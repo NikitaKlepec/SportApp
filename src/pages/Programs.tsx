@@ -3,6 +3,15 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { Program } from '../types'
 
+// 1 упражнение, 2–4 упражнения, 5+ упражнений
+function exercisesWord(n: number) {
+  const mod10 = n % 10
+  const mod100 = n % 100
+  if (mod10 === 1 && mod100 !== 11) return 'упражнение'
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'упражнения'
+  return 'упражнений'
+}
+
 export default function Programs() {
   const [programs, setPrograms] = useState<Program[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
@@ -30,7 +39,7 @@ export default function Programs() {
   }, [])
 
   async function deleteProgram(id: string) {
-    if (!confirm('Удалить программу? Это также уберёт её из календаря.')) return
+    if (!confirm('Удалить программу? Она также пропадёт из календаря и из тех тренировок, куда была добавлена.')) return
     await supabase.from('programs').delete().eq('id', id)
     setPrograms((prev) => prev.filter((p) => p.id !== id))
   }
@@ -49,32 +58,36 @@ export default function Programs() {
       {programs.length === 0 ? (
         <p className="text-muted">
           Пока нет ни одной программы. Программа — это набор упражнений с подходами и
-          повторениями, который потом можно назначить на день в календаре.
+          повторениями. Её можно назначить на день в календаре или включить в тренировку,
+          собранную из нескольких программ.
         </p>
       ) : (
         <div className="grid gap-3">
-          {programs.map((p) => (
-            <div
-              key={p.id}
-              className="flex items-center justify-between bg-surface border border-line rounded-sm p-4"
-            >
-              <div>
-                <h3 className="font-medium">{p.name}</h3>
-                <span className="text-xs text-muted">
-                  {counts[p.id] ?? 0} упражнени{counts[p.id] === 1 ? 'е' : 'й'}
-                </span>
-                {p.notes && <p className="text-xs text-muted mt-1">{p.notes}</p>}
+          {programs.map((p) => {
+            const n = counts[p.id] ?? 0
+            return (
+              <div
+                key={p.id}
+                className="flex items-center justify-between bg-surface border border-line rounded-sm p-4"
+              >
+                <div>
+                  <h3 className="font-medium">{p.name}</h3>
+                  <span className="text-xs text-muted">
+                    {n} {exercisesWord(n)}
+                  </span>
+                  {p.notes && <p className="text-xs text-muted mt-1">{p.notes}</p>}
+                </div>
+                <div className="flex gap-3 text-sm">
+                  <Link to={`/programs/${p.id}`} className="text-ink hover:underline">
+                    Изменить
+                  </Link>
+                  <button onClick={() => deleteProgram(p.id)} className="text-red-600 hover:underline">
+                    Удалить
+                  </button>
+                </div>
               </div>
-              <div className="flex gap-3 text-sm">
-                <Link to={`/programs/${p.id}`} className="text-ink hover:underline">
-                  Изменить
-                </Link>
-                <button onClick={() => deleteProgram(p.id)} className="text-red-600 hover:underline">
-                  Удалить
-                </button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

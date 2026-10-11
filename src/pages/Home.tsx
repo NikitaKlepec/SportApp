@@ -1,39 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
-import { CalendarEntry, ProgramExercise } from '../types'
-
-function todayStr() {
-  return new Date().toISOString().slice(0, 10)
-}
+import { fetchDayPlan, DayPlan } from '../lib/dayPlan'
+import { localDateStr } from '../lib/dates'
 
 export default function Home() {
-  const [entry, setEntry] = useState<CalendarEntry | null>(null)
-  const [items, setItems] = useState<ProgramExercise[]>([])
+  const [plan, setPlan] = useState<DayPlan | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function load() {
-      const { data: entryData } = await supabase
-        .from('calendar_entries')
-        .select('*, program:programs(*)')
-        .eq('date', todayStr())
-        .maybeSingle()
-
-      setEntry(entryData as unknown as CalendarEntry)
-
-      if (entryData?.program_id) {
-        const { data: exData } = await supabase
-          .from('program_exercises')
-          .select('*, exercise:exercises(*)')
-          .eq('program_id', entryData.program_id)
-          .order('order_index')
-        setItems((exData as unknown as ProgramExercise[]) ?? [])
-      }
-      setLoading(false)
-    }
-    load()
+    fetchDayPlan(localDateStr())
+      .then(setPlan)
+      .finally(() => setLoading(false))
   }, [])
+
+  const multi = (plan?.sections.length ?? 0) > 1
 
   return (
     <div>
@@ -44,26 +24,54 @@ export default function Home() {
 
       {loading ? (
         <p className="text-muted">Загрузка…</p>
-      ) : !entry || !entry.program_id ? (
+      ) : !plan ? (
         <div className="bg-surface border border-line rounded-sm p-6 text-center">
-          <p className="mb-4 text-muted">На сегодня программа не назначена.</p>
+          <p className="mb-4 text-muted">На сегодня тренировка не назначена.</p>
           <Link to="/calendar" className="text-sm bg-ink text-white px-4 py-2 rounded-sm">
             Назначить в календаре
           </Link>
         </div>
+      ) : plan.items.length === 0 ? (
+        <div className="bg-surface border border-line rounded-sm p-6 text-center">
+          <p className="mb-1 font-medium">{plan.title}</p>
+          <p className="mb-4 text-muted text-sm">В этой тренировке пока нет упражнений.</p>
+          <Link
+            to={plan.isComposite ? '/templates' : '/programs'}
+            className="text-sm bg-ink text-white px-4 py-2 rounded-sm"
+          >
+            {plan.isComposite ? 'Открыть тренировки' : 'Открыть программы'}
+          </Link>
+        </div>
       ) : (
         <div className="bg-surface border border-line rounded-sm p-5">
-          <h2 className="font-medium mb-4">{entry.program?.name}</h2>
-          <ul className="grid gap-2 mb-5">
-            {items.map((item) => (
-              <li key={item.id} className="flex justify-between text-sm border-b border-line pb-2">
-                <span>{item.exercise?.name}</span>
-                <span className="text-muted">
-                  {item.sets}×{item.reps}{item.weight ? ` · ${item.weight} кг` : ''}
-                </span>
-              </li>
+          <h2 className="font-medium mb-1">{plan.title}</h2>
+          <p className="text-xs text-muted mb-4">
+            {multi ? `частей: ${plan.sections.length} · ` : ''}всего упражнений: {plan.items.length}
+          </p>
+
+          <div className="grid gap-5 mb-5">
+            {plan.sections.map((section, si) => (
+              <div key={si}>
+                {multi && (
+                  <h3 className="text-xs font-medium uppercase tracking-wide text-muted mb-2">
+                    {si + 1}. {section.name}
+                  </h3>
+                )}
+                <ul className="grid gap-2">
+                  {section.items.map((item) => (
+                    <li key={`${si}-${item.id}`} className="flex justify-between gap-3 text-sm border-b border-line pb-2">
+                      <span>{item.exercise?.name}</span>
+                      <span className="text-muted shrink-0">
+                        {item.sets}×{item.reps}
+                        {item.weight ? ` · ${item.weight} кг` : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
-          </ul>
+          </div>
+
           <Link
             to="/workout"
             className="inline-block bg-accent text-ink px-5 py-2 rounded-sm font-medium hover:opacity-90"
